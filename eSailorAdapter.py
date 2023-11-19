@@ -3,6 +3,7 @@ import time
 import rospy
 from mavros_msgs.msg import OverrideRCIn
 from std_msgs.msg import Int32MultiArray
+from std_msgs.msg import Float64MultiArray
 
 
 def main():
@@ -11,8 +12,14 @@ def main():
     rospy.init_node('esailor_adapter', anonymous=True)
 
     actuatorsCommandTopicManager = ActuatorsCommandTopicManager()    
+    pixhawkDataTopicManager = PixhawkDataTopicManager()
+
+
+    rate = rospy.Rate(10)  # 10 Hz
+
+    while not rospy.is_shutdown():
+        pixhawkDataTopicManager.publishExtractedData()
     
-    # Mantém o script em execução
     rospy.spin()
     
     
@@ -81,6 +88,76 @@ class ActuatorsCommandTopicManager:
 
         return msg
 
+
+class PixhawkDataTopicManager:
+    def __init__(self):
+        'Distance to target in meters'
+        self.distToTarget = 0
+        self.pixhawk_extracted_data_pub = rospy.Publisher('/esailor_adapter/pixhawk_extracted_data', Float64MultiArray, queue_size=10)
+        self.dataArray = None
+        self.fillVariablesWithPixhawkValues()
+        
+
+    def publishExtractedData(self):
+        if self.dataArray != None:
+            self.fillVariablesWithPixhawkValues()
+            self.pixhawk_extracted_data_pub.publish(self.dataArray)
+        else:
+            rospy.loginfo("There is not extracted data to publish on esailor_adapter/pixhawk_extracted_data topic")
+            
+
+    def fillVariablesWithPixhawkValues(self):
+        self.distanceToTarget = self.getFromPixhawkDistanceToTarget()
+        self.angleBetweenFowardAndTarget = self.getFromPixhawkAngleBetweenFowardAndTarget()
+        self.surgeSpeed = self.getFromPixhawkSurgeSpeed()
+        self.apparentWindSpeed = self.getFromPixhawkApparentWindSpeed()
+        self.apparentWindAngle = self.getFromPixhawkApparentWindAngle()
+        self.boomAngle = self.getFromPixhawkBoomAngle()
+        self.rudderAngle = self.getFromPixhawkRudderAngle()
+        self.electricPropulsionPower = self.getFromPixhawkElectricPropulsion()
+        self.rollAngle = self.getFromPixhawkRollAngle()
+
+        self.dataArray = Float64MultiArray(data=[self.distanceToTarget,
+                                            self.angleBetweenFowardAndTarget,
+                                            self.surgeSpeed, 
+                                            self.apparentWindSpeed,
+                                            self.apparentWindAngle,
+                                            self.boomAngle,
+                                            self.rudderAngle,
+                                            self.electricPropulsionPower,
+                                            self.rollAngle])
+
+
+    
+    def getFromPixhawkDistanceToTarget(self):
+        return 1.1
+    
+    def getFromPixhawkAngleBetweenFowardAndTarget(self):
+        return 1.2
+    
+    def getFromPixhawkSurgeSpeed(self):
+        return 1.3
+    
+    def getFromPixhawkApparentWindSpeed(self):
+        return 1.4
+    
+    def getFromPixhawkApparentWindAngle(self):
+        return 1.5
+    
+    def getFromPixhawkBoomAngle(self):
+        return 1.6
+    
+    def getFromPixhawkRudderAngle(self):
+        return 1.7
+
+    def getFromPixhawkElectricPropulsion(self):
+        return 1.8
+    
+    def getFromPixhawkRollAngle(self):
+        return 1.9
+
+
+
 '''
 class NodeManager:
     def __init__(self, tipo, velocidade):
@@ -90,13 +167,6 @@ class NodeManager:
     def toString(self):
         print(f'Este carro é um {self.tipo} e está andando a {self.velocidade} quilômetros por hora')
 
-class PixhawkDataTopicManager:
-    def __init__(self, tipo, velocidade):
-        self.tipo = tipo
-        self.velocidade = velocidade
-    
-    def toString(self):
-        print(f'Este carro é um {self.tipo} e está andando a {self.velocidade} quilômetros por hora')
 
 class PixhawkDataExtractor:
     def __init__(self, tipo, velocidade):
