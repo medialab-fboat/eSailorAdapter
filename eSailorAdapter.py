@@ -6,6 +6,7 @@ from std_msgs.msg import Int32MultiArray
 from std_msgs.msg import Float64MultiArray
 
 
+
 def main():
 
     # Inicializa o nó ROS com o nome "leitor_comandos"
