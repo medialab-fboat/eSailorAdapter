@@ -4,7 +4,9 @@ import rospy
 from mavros_msgs.msg import OverrideRCIn
 from std_msgs.msg import Int32MultiArray
 from std_msgs.msg import Float64MultiArray
-
+from sensor_msgs.msg import Imu
+from geometry_msgs.msg import Quaternion
+from math import atan2, asin
 
 
 def main():
@@ -55,6 +57,7 @@ class ActuatorsCommandTopicManager:
         
         self.actuator_command_entrance_pub = rospy.Subscriber('/esailor_adapter/actuator_command_entrance', Int32MultiArray, self.command_entrance_callback)
         
+        rospy.loginfo("Inicializado tópico /esailor_adapter/actuator_command_entrance")
     
     def command_entrance_callback(self, data):    
         # Aqui, você pode processar os dados conforme necessário
@@ -95,29 +98,47 @@ class PixhawkDataTopicManager:
         'Distance to target in meters'
         self.distToTarget = 0
         self.pixhawk_extracted_data_pub = rospy.Publisher('/esailor_adapter/pixhawk_extracted_data', Float64MultiArray, queue_size=10)
-        self.dataArray = None
-        self.fillVariablesWithPixhawkValues()
         
+        self.imu_topic = '/mavros/imu/data'
+        
+        rospy.Subscriber(self.imu_topic, Imu, self.imu_callback)
+
+        self.dataArray = None
+        
+        self.distanceToTarget = -1.1
+        self.angleBetweenFowardAndTarget = 1.2
+        self.surgeSpeed = 1.3
+        self.apparentWindSpeed = 1.4
+        self.apparentWindAngle = 1.5
+        self.boomAngle = 1.6
+        self.rudderAngle = 1.7
+        self.electricPropulsionPower = 1.8
+        self.rollAngle = 0
+
+
+    def imu_callback(self, data):        
+        orientation = data.orientation
+        quaternion = Quaternion(orientation.x, orientation.y, orientation.z, orientation.w)
+
+        # Convertion quaternion to Euler angle
+        roll = atan2(2.0 * (quaternion.y * quaternion.z + quaternion.w * quaternion.x),
+                    quaternion.w * quaternion.w - quaternion.x * quaternion.x - quaternion.y * quaternion.y + quaternion.z * quaternion.z)
+        
+        roll_degrees = roll * (180.0 / 3.14159)        
+        self.rollAngle = roll_degrees
+        print("***Inclinação do Roll: {:.2f} graus".format(roll_degrees))
+
 
     def publishExtractedData(self):
-        if self.dataArray != None:
-            self.fillVariablesWithPixhawkValues()
+        self.fillDataArray()
+        '''if self.dataArray != None:
+            self.fillDataArray()
             self.pixhawk_extracted_data_pub.publish(self.dataArray)
         else:
             rospy.loginfo("There is not extracted data to publish on esailor_adapter/pixhawk_extracted_data topic")
-            
+        '''
 
-    def fillVariablesWithPixhawkValues(self):
-        self.distanceToTarget = self.getFromPixhawkDistanceToTarget()
-        self.angleBetweenFowardAndTarget = self.getFromPixhawkAngleBetweenFowardAndTarget()
-        self.surgeSpeed = self.getFromPixhawkSurgeSpeed()
-        self.apparentWindSpeed = self.getFromPixhawkApparentWindSpeed()
-        self.apparentWindAngle = self.getFromPixhawkApparentWindAngle()
-        self.boomAngle = self.getFromPixhawkBoomAngle()
-        self.rudderAngle = self.getFromPixhawkRudderAngle()
-        self.electricPropulsionPower = self.getFromPixhawkElectricPropulsion()
-        self.rollAngle = self.getFromPixhawkRollAngle()
-
+    def fillDataArray(self):
         self.dataArray = Float64MultiArray(data=[self.distanceToTarget,
                                             self.angleBetweenFowardAndTarget,
                                             self.surgeSpeed, 
@@ -127,35 +148,6 @@ class PixhawkDataTopicManager:
                                             self.rudderAngle,
                                             self.electricPropulsionPower,
                                             self.rollAngle])
-
-
-    
-    def getFromPixhawkDistanceToTarget(self):
-        return 1.1
-    
-    def getFromPixhawkAngleBetweenFowardAndTarget(self):
-        return 1.2
-    
-    def getFromPixhawkSurgeSpeed(self):
-        return 1.3
-    
-    def getFromPixhawkApparentWindSpeed(self):
-        return 1.4
-    
-    def getFromPixhawkApparentWindAngle(self):
-        return 1.5
-    
-    def getFromPixhawkBoomAngle(self):
-        return 1.6
-    
-    def getFromPixhawkRudderAngle(self):
-        return 1.7
-
-    def getFromPixhawkElectricPropulsion(self):
-        return 1.8
-    
-    def getFromPixhawkRollAngle(self):
-        return 1.9
 
 
 
@@ -169,13 +161,7 @@ class NodeManager:
         print(f'Este carro é um {self.tipo} e está andando a {self.velocidade} quilômetros por hora')
 
 
-class PixhawkDataExtractor:
-    def __init__(self, tipo, velocidade):
-        self.tipo = tipo
-        self.velocidade = velocidade
-    
-    def toString(self):
-        print(f'Este carro é um {self.tipo} e está andando a {self.velocidade} quilômetros por hora')
+
 
 
 class PixhawkDataAdapter:
