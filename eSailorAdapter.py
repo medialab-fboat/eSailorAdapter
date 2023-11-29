@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 import time
 import rospy
-from mavros_msgs.msg import OverrideRCIn
+from mavros_msgs.msg import OverrideRCIn, WaypointList, Waypoint
+from mavros_msgs.srv import *
 from std_msgs.msg import Int32MultiArray
 from std_msgs.msg import Float64MultiArray
-from sensor_msgs.msg import Imu
+from sensor_msgs.msg import Imu, NavSatFix
 from geometry_msgs.msg import Quaternion
+from geopy.distance import geodesic
 from math import atan2, asin
-
 
 def main():
 
@@ -18,7 +19,7 @@ def main():
     pixhawkDataTopicManager = PixhawkDataTopicManager()
 
 
-    rate = rospy.Rate(10)  # 10 Hz
+    rate = rospy.Rate(3)  # 10 Hz
 
     while not rospy.is_shutdown():
         pixhawkDataTopicManager.publishExtractedData()
@@ -98,14 +99,23 @@ class PixhawkDataTopicManager:
         'Distance to target in meters'
         self.distToTarget = 0
         self.pixhawk_extracted_data_pub = rospy.Publisher('/esailor_adapter/pixhawk_extracted_data', Float64MultiArray, queue_size=10)
-        
-        self.imu_topic = '/mavros/imu/data'
-        
+        self.extractedMessage = None
+
+
+        #IMU
+        self.imu_topic = '/mavros/imu/data'        
         rospy.Subscriber(self.imu_topic, Imu, self.imu_callback)
+
+        #GPS
+        self.waypoint_sub = rospy.Subscriber('/mavros/mission/waypoints', WaypointList, self.waypoint_callback)
+        self.current_position_sub = rospy.Subscriber('/mavros/global_position/global', NavSatFix, self.position_callback)
+        self.waypoint_list = WaypointList()
+        self.current_position = None
+
 
         self.dataArray = None
         
-        self.distanceToTarget = -1.1
+        self.distanceToTarget = 0
         self.angleBetweenFowardAndTarget = 1.2
         self.surgeSpeed = 1.3
         self.apparentWindSpeed = 1.4
@@ -129,14 +139,63 @@ class PixhawkDataTopicManager:
         print("***Inclinação do Roll: {:.2f} graus".format(roll_degrees))
 
 
+    def waypoint_callback(self, waypoints):
+        if waypoints.waypoints:
+            self.waypoint_list = waypoints
+            self.calculate_distance()          
+            
+    def position_callback(self, position):
+        self.current_position = position
+        self.calculate_distance()
+
+    def calculate_distance(self):
+        #self.quantityOfWayPointsInPixhawk = 0
+        if self.waypoint_list.waypoints and self.current_position:
+            rospy.wait_for_service('mavros/mission/pull')
+            try:
+                wpPullService = rospy.ServiceProxy('mavros/mission/pull', WaypointPull,persistent=True)
+                #self.quantityOfWayPointsInPixhawk = wpPullService().wp_received
+                wpPullService().wp_received
+
+                #print("self.quantityOfWayPointsInPixhawk")
+                #print(self.quantityOfWayPointsInPixhawk)
+            except rospy.ServiceException:
+                print("Service Puling call failed:")
+            
+            #If there is at least one waypoint beside vehicle current position waypoint in pixhawk
+            if len(self.waypoint_list.waypoints) > 1:
+                #self.waypoint_list.waypoints[0] is the vehicle current position waypoint as mavros default
+                #self.waypoint_list.waypoints[1] is the first waypoint in th pixhawk mission
+                waypoint_lat = self.waypoint_list.waypoints[1].x_lat
+                waypoint_lon = self.waypoint_list.waypoints[1].y_long
+            
+                vehicle_lat = self.current_position.latitude
+                vehicle_lon = self.current_position.longitude
+
+                rospy.loginfo(f'Latitude waypoint{waypoint_lat}')
+                rospy.loginfo(f'Longitude waypoint{waypoint_lon}')
+                rospy.loginfo(f'Latitude veiculo{vehicle_lat}')
+                rospy.loginfo(f'Longitude veiculo{vehicle_lon}')
+
+                self.distanceToTarget = self.calculate_distance_between_points(waypoint_lat, waypoint_lon, vehicle_lat, vehicle_lon)
+                print(f'*****Distance from vehicle to waypoint: {self.distanceToTarget} meters')
+            #else:
+             #   print('There is not any waypoint setted in pixhawk current mission')
+
+    def calculate_distance_between_points(self, lat1, lon1, lat2, lon2):
+        # Utilizando a biblioteca geopy para calcular a distância geodésica
+        waypoint_coords = (lat1, lon1)
+        vehicle_coords = (lat2, lon2)
+        distance = geodesic(waypoint_coords, vehicle_coords).meters
+
+        return distance
+
+
     def publishExtractedData(self):
         self.fillDataArray()
-        '''if self.dataArray != None:
-            self.fillDataArray()
-            self.pixhawk_extracted_data_pub.publish(self.dataArray)
-        else:
-            rospy.loginfo("There is not extracted data to publish on esailor_adapter/pixhawk_extracted_data topic")
-        '''
+        self.pixhawk_extracted_data_pub.publish(self.dataArray)
+        
+    
 
     def fillDataArray(self):
         self.dataArray = Float64MultiArray(data=[self.distanceToTarget,
