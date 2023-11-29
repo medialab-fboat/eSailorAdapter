@@ -19,7 +19,7 @@ def main():
     pixhawkDataTopicManager = PixhawkDataTopicManager()
 
 
-    rate = rospy.Rate(3)  # 10 Hz
+    rate = rospy.Rate(10)  # 10 Hz
 
     while not rospy.is_shutdown():
         pixhawkDataTopicManager.publishExtractedData()
@@ -71,18 +71,18 @@ class ActuatorsCommandTopicManager:
 
     def update_pwm(self, pwm_array):        
         
-        rospy.loginfo("dentro do update " )
+        #rospy.loginfo("dentro do update " )
                
         pwm_msg = self.createMessageUpdateChannels(pwm_array)
 
-        rospy.loginfo("Antes de alterar canais 1, 2 e 3 ")
+        #rospy.loginfo("Antes de alterar canais 1, 2 e 3 ")
 
         self.rc_pub.publish(pwm_msg)
         
-        rospy.loginfo("Alterados o canais 1, 2 e 3 ")
+        #rospy.loginfo("Alterados o canais 1, 2 e 3 ")
 
     def createMessageUpdateChannels(self, pwm_array):
-        rospy.loginfo("dentro do createMessageUpdateChannels " )
+        #rospy.loginfo("dentro do createMessageUpdateChannels " )
         rc_channels = [1500] * 18  # Inicializa todos os canais com neutro (1500us)
         rc_channels[0] = pwm_array[0]  # Define o valor PWM desejado no canal 1
         rc_channels[1] = pwm_array[1]  # Define o valor PWM desejado no canal 2
@@ -136,7 +136,7 @@ class PixhawkDataTopicManager:
         
         roll_degrees = roll * (180.0 / 3.14159)        
         self.rollAngle = roll_degrees
-        print("***Inclinação do Roll: {:.2f} graus".format(roll_degrees))
+        #print("***Inclinação do Roll: {:.2f} graus".format(roll_degrees))
 
 
     def waypoint_callback(self, waypoints):
@@ -178,12 +178,12 @@ class PixhawkDataTopicManager:
                 rospy.loginfo(f'Longitude veiculo{vehicle_lon}')
 
                 self.distanceToTarget = self.calculate_distance_between_points(waypoint_lat, waypoint_lon, vehicle_lat, vehicle_lon)
-                print(f'*****Distance from vehicle to waypoint: {self.distanceToTarget} meters')
+                #print(f'*****Distance from vehicle to waypoint: {self.distanceToTarget} meters')
             #else:
              #   print('There is not any waypoint setted in pixhawk current mission')
 
     def calculate_distance_between_points(self, lat1, lon1, lat2, lon2):
-        # Utilizando a biblioteca geopy para calcular a distância geodésica
+        # Using geopy lib to calculate geodesic distance
         waypoint_coords = (lat1, lon1)
         vehicle_coords = (lat2, lon2)
         distance = geodesic(waypoint_coords, vehicle_coords).meters
