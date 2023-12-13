@@ -1,2 +1,6 @@
 
 waypoint_reader.py
+ignore/angle_between_waypoint_n_foward.py
+ignore/calcular_direcao_entre_waypoints.py
+ignore/eSailorAdapter.py
+ignore/test_bearing.py

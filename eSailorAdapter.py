@@ -1,23 +1,21 @@
 #!/usr/bin/env python3
 import time
 import rospy
-from mavros_msgs.msg import OverrideRCIn, WaypointList, Waypoint
+from mavros_msgs.msg import OverrideRCIn, WaypointList, Waypoint, State
 from mavros_msgs.srv import *
 from std_msgs.msg import Int32MultiArray
-from std_msgs.msg import Float64MultiArray
+from std_msgs.msg import Float64MultiArray, Float64
 from sensor_msgs.msg import Imu, NavSatFix
 from geometry_msgs.msg import Quaternion
 from geopy.distance import geodesic
-from math import atan2, asin
-
+from math import atan2, asin, degrees, sqrt, radians
 def main():
 
-    # Inicializa o nó ROS com o nome "leitor_comandos"
+    # esailor_adapter node start
     rospy.init_node('esailor_adapter', anonymous=True)
 
     actuatorsCommandTopicManager = ActuatorsCommandTopicManager()    
     pixhawkDataTopicManager = PixhawkDataTopicManager()
-
 
     rate = rospy.Rate(10)  # 10 Hz
 
@@ -25,68 +23,33 @@ def main():
         pixhawkDataTopicManager.publishExtractedData()
     
     rospy.spin()
-    
-    
-    '''
-    rospy.loginfo("Antes do While " )
-    
-    try:
-        while not rospy.is_shutdown():    
-            channel = 1
-            pwm_value = 1500
 
-            rospy.loginfo("dentro do While " )
-            actuatorsCommandTopicManager.update_pwm(channel)
-            
-            if channel >= 6:
-                channel = 1
-            else:
-                channel = channel + 1
-
-            time.sleep(0.5)
-
-    except rospy.ROSInterruptException:
-        pass
-    '''
 
 class ActuatorsCommandTopicManager:    
-    def __init__(self):
-        # Inicializa o nó ROS com o nome "leitor_comandos"
-        #rospy.init_node('mavros_node_2', anonymous=True, log_level=rospy.DEBUG) 
-        
+    def __init__(self):        
         self.rc_pub = rospy.Publisher('/mavros/rc/override', OverrideRCIn, queue_size=10)    
         
         self.actuator_command_entrance_pub = rospy.Subscriber('/esailor_adapter/actuator_command_entrance', Int32MultiArray, self.command_entrance_callback)
         
         rospy.loginfo("Inicializado tópico /esailor_adapter/actuator_command_entrance")
     
-    def command_entrance_callback(self, data):    
-        # Aqui, você pode processar os dados conforme necessário
+    def command_entrance_callback(self, data):
         rospy.loginfo("Comandos recebidos: {}".format(data.data))
 
-        # Adicione a impressão dos valores recebidos
-        rospy.loginfo("Valor 1: {:.2f}, Valor 2: {:.2f}, Valor 3: {:.2f}".format(data.data[0], data.data[1], data.data[2]))
+        rospy.loginfo("Value 1: {:.2f}, Value 2: {:.2f}, Value 3: {:.2f}".format(data.data[0], data.data[1], data.data[2]))
         self.update_pwm(data.data)
 
 
-    def update_pwm(self, pwm_array):        
-        
-        #rospy.loginfo("dentro do update " )
-               
+    def update_pwm(self, pwm_array):                
         pwm_msg = self.createMessageUpdateChannels(pwm_array)
-
-        #rospy.loginfo("Antes de alterar canais 1, 2 e 3 ")
-
-        self.rc_pub.publish(pwm_msg)
-        
-        #rospy.loginfo("Alterados o canais 1, 2 e 3 ")
+        self.rc_pub.publish(pwm_msg)        
+        #rospy.loginfo("Updated channels 1, 2 and 3 ")
 
     def createMessageUpdateChannels(self, pwm_array):
-        #rospy.loginfo("dentro do createMessageUpdateChannels " )
-        rc_channels = [1500] * 18  # Inicializa todos os canais com neutro (1500us)
-        rc_channels[0] = pwm_array[0]  # Define o valor PWM desejado no canal 1
-        rc_channels[1] = pwm_array[1]  # Define o valor PWM desejado no canal 2
-        rc_channels[2] = pwm_array[2]  # Define o valor PWM desejado no canal 3
+        rc_channels = [1500] * 18  # Inicialize all channels with (1500us)
+        rc_channels[0] = pwm_array[0]  # Pixhawk channel(RCIn) 1
+        rc_channels[1] = pwm_array[1]  # Pixhawk channel(RCIn) 2
+        rc_channels[2] = pwm_array[2]  # Pixhawk channel(RCIn) 3
 
         msg = OverrideRCIn()
         msg.channels = rc_channels
@@ -95,16 +58,15 @@ class ActuatorsCommandTopicManager:
 
 
 class PixhawkDataTopicManager:
-    def __init__(self):
-        'Distance to target in meters'
-        self.distToTarget = 0
+    def __init__(self):        
         self.pixhawk_extracted_data_pub = rospy.Publisher('/esailor_adapter/pixhawk_extracted_data', Float64MultiArray, queue_size=10)
         self.extractedMessage = None
 
-
         #IMU
+        self.orientation = None
         self.imu_topic = '/mavros/imu/data'        
         rospy.Subscriber(self.imu_topic, Imu, self.imu_callback)
+        
 
         #GPS
         self.waypoint_sub = rospy.Subscriber('/mavros/mission/waypoints', WaypointList, self.waypoint_callback)
@@ -112,11 +74,17 @@ class PixhawkDataTopicManager:
         self.waypoint_list = WaypointList()
         self.current_position = None
 
-
         self.dataArray = None
+
+        #Bussola
+        self.current_yaw = 0
+        rospy.Subscriber("/mavros/global_position/compass_hdg", Float64, self.handle_compass_hdg_rad)
+
+
+
         
         self.distanceToTarget = 0
-        self.angleBetweenFowardAndTarget = 1.2
+        self.angleBetweenFowardAndTarget = 0
         self.surgeSpeed = 1.3
         self.apparentWindSpeed = 1.4
         self.apparentWindAngle = 1.5
@@ -127,17 +95,16 @@ class PixhawkDataTopicManager:
 
 
     def imu_callback(self, data):        
-        orientation = data.orientation
-        quaternion = Quaternion(orientation.x, orientation.y, orientation.z, orientation.w)
+        self.orientation = data.orientation
+        quaternion = Quaternion(self.orientation.x, self.orientation.y, self.orientation.z, self.orientation.w)
 
         # Convertion quaternion to Euler angle
         roll = atan2(2.0 * (quaternion.y * quaternion.z + quaternion.w * quaternion.x),
                     quaternion.w * quaternion.w - quaternion.x * quaternion.x - quaternion.y * quaternion.y + quaternion.z * quaternion.z)
         
-        roll_degrees = roll * (180.0 / 3.14159)        
-        self.rollAngle = roll_degrees
-        #print("***Inclinação do Roll: {:.2f} graus".format(roll_degrees))
-
+        #roll_degrees = roll * (180.0 / 3.14159)        
+        self.rollAngle = degrees(roll)
+        
 
     def waypoint_callback(self, waypoints):
         if waypoints.waypoints:
@@ -148,17 +115,16 @@ class PixhawkDataTopicManager:
         self.current_position = position
         self.calculate_distance()
 
-    def calculate_distance(self):
-        #self.quantityOfWayPointsInPixhawk = 0
+    def handle_compass_hdg_rad(self, data):
+        self.current_yaw = data.data        
+
+    def calculate_distance(self):        
         if self.waypoint_list.waypoints and self.current_position:
             rospy.wait_for_service('mavros/mission/pull')
             try:
-                wpPullService = rospy.ServiceProxy('mavros/mission/pull', WaypointPull,persistent=True)
-                #self.quantityOfWayPointsInPixhawk = wpPullService().wp_received
+                wpPullService = rospy.ServiceProxy('mavros/mission/pull', WaypointPull,persistent=True)                
                 wpPullService().wp_received
 
-                #print("self.quantityOfWayPointsInPixhawk")
-                #print(self.quantityOfWayPointsInPixhawk)
             except rospy.ServiceException:
                 print("Service Puling call failed:")
             
@@ -178,9 +144,60 @@ class PixhawkDataTopicManager:
                 rospy.loginfo(f'Longitude veiculo{vehicle_lon}')
 
                 self.distanceToTarget = self.calculate_distance_between_points(waypoint_lat, waypoint_lon, vehicle_lat, vehicle_lon)
+                
+                self.angleBetweenFowardAndTarget = self.calculate_direction_between_waypoints(waypoint_lat, waypoint_lon, vehicle_lat, vehicle_lon)                
                 #print(f'*****Distance from vehicle to waypoint: {self.distanceToTarget} meters')
-            #else:
-             #   print('There is not any waypoint setted in pixhawk current mission')
+    
+    def calculate_direction_between_waypoints(self, lat1, lon1, lat2, lon2):
+        # waypoint_current and waypoint_destination are tuples containing coordinates (latitude, longitude)
+        # vehicle_orientation is the angle in degrees to which the front of the vehicle is pointing
+
+        # Calculate vectors representing the directions
+        vector_current_to_destination = (
+            lat1 - lat2,
+            lon1 - lon2
+        )
+
+        # Calculate the angle between the vectors using the atan2 function
+        angle_between_directions = atan2(vector_current_to_destination[1], vector_current_to_destination[0])
+
+        # Convert the angle to degrees
+        angle_between_directions_degrees = degrees(angle_between_directions)
+
+        # Adjust the angle to ensure it is in the range [0, 360)
+        angle_between_directions_degrees = (angle_between_directions_degrees + 360) % 360
+
+        # Take into account the orientation of the vehicle
+        final_direction = (angle_between_directions_degrees - self.current_yaw + 360) % 360
+
+        return final_direction
+
+    
+    '''
+    def calcular_direcao_entre_waypoints(self, lat1, lon1, lat2, lon2):
+        # waypoint_atual e waypoint_destino são tuplas contendo as coordenadas (latitude, longitude)
+        # orientacao_veiculo é o ângulo em graus para o qual a frente do veículo está apontando
+
+        # Calcular os vetores representando as direções
+        vetor_atual_para_destino = (
+            lat1 - lat2,
+            lon1 - lon2
+        )
+
+        # Calcular o ângulo entre os vetores usando a função atan2
+        angulo_entre_direcoes = atan2(vetor_atual_para_destino[1], vetor_atual_para_destino[0])
+
+        # Converter o ângulo para graus
+        angulo_entre_direcoes_graus = degrees(angulo_entre_direcoes)
+
+        # Ajustar o ângulo para garantir que esteja no intervalo [0, 360)
+        angulo_entre_direcoes_graus = (angulo_entre_direcoes_graus + 360) % 360
+
+        # Levar em consideração a orientação do veículo
+        direcao_final = (angulo_entre_direcoes_graus - self.current_yaw + 360) % 360
+
+        return direcao_final
+    '''    
 
     def calculate_distance_between_points(self, lat1, lon1, lat2, lon2):
         # Using geopy lib to calculate geodesic distance
@@ -189,13 +206,12 @@ class PixhawkDataTopicManager:
         distance = geodesic(waypoint_coords, vehicle_coords).meters
 
         return distance
-
+    
 
     def publishExtractedData(self):
         self.fillDataArray()
         self.pixhawk_extracted_data_pub.publish(self.dataArray)
-        
-    
+            
 
     def fillDataArray(self):
         self.dataArray = Float64MultiArray(data=[self.distanceToTarget,
@@ -208,30 +224,6 @@ class PixhawkDataTopicManager:
                                             self.electricPropulsionPower,
                                             self.rollAngle])
 
-
-
-'''
-class NodeManager:
-    def __init__(self, tipo, velocidade):
-        self.tipo = tipo
-        self.velocidade = velocidade
-    
-    def toString(self):
-        print(f'Este carro é um {self.tipo} e está andando a {self.velocidade} quilômetros por hora')
-
-
-
-
-
-class PixhawkDataAdapter:
-    def __init__(self, tipo, velocidade):
-        self.tipo = tipo
-        self.velocidade = velocidade
-    
-    def toString(self):
-        print(f'Este carro é um {self.tipo} e está andando a {self.velocidade} quilômetros por hora')
-
-'''           
 
 if __name__ == '__main__':    
     try:
