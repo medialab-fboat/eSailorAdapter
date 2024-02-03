@@ -20,7 +20,6 @@ def main():
         command_data = Int32MultiArray(data=[a, b, c])
 
         a = a + 5
-        
         if executionCounter % 10 == 0:
             b = MINIMUM_PWM
         elif executionCounter % 5 == 0:
@@ -28,9 +27,9 @@ def main():
         
         c = c + 9
 
-        rospy.loginfo("before publish")        
+        rospy.loginfo("antes de publicar")        
         command_pub.publish(command_data)
-        rospy.loginfo("after publish") 
+        rospy.loginfo("depois de publicar") 
         executionCounter += 1
         rate.sleep()
 

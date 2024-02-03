@@ -41,6 +41,10 @@ class FileWriter:
             print("Fail when tried write file.")
 
 
+
+
+
+
 class ActuatorsCommandTopicManager:    
     def __init__(self):        
         self.rc_pub = rospy.Publisher('/mavros/rc/override', OverrideRCIn, queue_size=10)    
@@ -99,6 +103,9 @@ class PixhawkDataTopicManager:
         #Bussola
         self.current_yaw = 0
         rospy.Subscriber("/mavros/global_position/compass_hdg", Float64, self.handle_compass_hdg_rad)
+
+
+
         
         self.distanceToTarget = 0
         self.angleBetweenFowardAndTarget = 0
@@ -188,6 +195,33 @@ class PixhawkDataTopicManager:
         final_direction = (angle_between_directions_degrees - self.current_yaw + 360) % 360
 
         return final_direction
+
+    
+    '''
+    def calcular_direcao_entre_waypoints(self, lat1, lon1, lat2, lon2):
+        # waypoint_atual e waypoint_destino são tuplas contendo as coordenadas (latitude, longitude)
+        # orientacao_veiculo é o ângulo em graus para o qual a frente do veículo está apontando
+
+        # Calcular os vetores representando as direções
+        vetor_atual_para_destino = (
+            lat1 - lat2,
+            lon1 - lon2
+        )
+
+        # Calcular o ângulo entre os vetores usando a função atan2
+        angulo_entre_direcoes = atan2(vetor_atual_para_destino[1], vetor_atual_para_destino[0])
+
+        # Converter o ângulo para graus
+        angulo_entre_direcoes_graus = degrees(angulo_entre_direcoes)
+
+        # Ajustar o ângulo para garantir que esteja no intervalo [0, 360)
+        angulo_entre_direcoes_graus = (angulo_entre_direcoes_graus + 360) % 360
+
+        # Levar em consideração a orientação do veículo
+        direcao_final = (angulo_entre_direcoes_graus - self.current_yaw + 360) % 360
+
+        return direcao_final
+    '''    
 
     def calculate_distance_between_points(self, lat1, lon1, lat2, lon2):
         # Using geopy lib to calculate geodesic distance
