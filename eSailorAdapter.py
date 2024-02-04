@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import time
 import rospy
-from mavros_msgs.msg import OverrideRCIn, WaypointList, Waypoint, State
+from mavros_msgs.msg import OverrideRCIn, WaypointList, Waypoint, State, RCOut
 from mavros_msgs.srv import *
 from std_msgs.msg import Int32MultiArray
 from std_msgs.msg import Float64MultiArray, Float64
@@ -64,7 +64,7 @@ class PixhawkDataTopicManager:
 
         #IMU
         self.orientation = None
-        self.imu_topic = '/mavros/imu/data'        
+        self.imu_topic = '/mavros/imu/data'
         rospy.Subscriber(self.imu_topic, Imu, self.imu_callback)
         
 
@@ -81,7 +81,10 @@ class PixhawkDataTopicManager:
         rospy.Subscriber("/mavros/global_position/compass_hdg", Float64, self.handle_compass_hdg_rad)
 
 
-
+        #Pixhawk Channels
+        self.rcIn_topic = '/mavros/rc/out'
+        rospy.Subscriber(self.rcIn_topic, RCOut, self.rc_callback)
+        
         
         self.distanceToTarget = 0
         self.angleBetweenFowardAndTarget = 0
@@ -90,7 +93,7 @@ class PixhawkDataTopicManager:
         self.apparentWindAngle = 1.5
         self.boomAngle = 1.6
         self.rudderAngle = 1.7
-        self.electricPropulsionPower = 1.8
+        self.electricPropulsionPower = 0
         self.rollAngle = 0
 
 
@@ -115,6 +118,10 @@ class PixhawkDataTopicManager:
         self.current_position = position
         self.calculate_distance()
 
+    def rc_callback(self, data):
+        #print("PWM of channel 1:", data.channels[0])        
+        self.electricPropulsionPower = int(data.channels[0])
+
     def handle_compass_hdg_rad(self, data):
         self.current_yaw = data.data        
 
@@ -138,10 +145,10 @@ class PixhawkDataTopicManager:
                 vehicle_lat = self.current_position.latitude
                 vehicle_lon = self.current_position.longitude
 
-                rospy.loginfo(f'Latitude waypoint{waypoint_lat}')
-                rospy.loginfo(f'Longitude waypoint{waypoint_lon}')
-                rospy.loginfo(f'Latitude veiculo{vehicle_lat}')
-                rospy.loginfo(f'Longitude veiculo{vehicle_lon}')
+                #rospy.loginfo(f'Latitude waypoint{waypoint_lat}')
+                #rospy.loginfo(f'Longitude waypoint{waypoint_lon}')
+                #rospy.loginfo(f'Latitude veiculo{vehicle_lat}')
+                #rospy.loginfo(f'Longitude veiculo{vehicle_lon}')
 
                 self.distanceToTarget = self.calculate_distance_between_points(waypoint_lat, waypoint_lon, vehicle_lat, vehicle_lon)
                 
@@ -171,33 +178,6 @@ class PixhawkDataTopicManager:
         final_direction = (angle_between_directions_degrees - self.current_yaw + 360) % 360
 
         return final_direction
-
-    
-    '''
-    def calcular_direcao_entre_waypoints(self, lat1, lon1, lat2, lon2):
-        # waypoint_atual e waypoint_destino são tuplas contendo as coordenadas (latitude, longitude)
-        # orientacao_veiculo é o ângulo em graus para o qual a frente do veículo está apontando
-
-        # Calcular os vetores representando as direções
-        vetor_atual_para_destino = (
-            lat1 - lat2,
-            lon1 - lon2
-        )
-
-        # Calcular o ângulo entre os vetores usando a função atan2
-        angulo_entre_direcoes = atan2(vetor_atual_para_destino[1], vetor_atual_para_destino[0])
-
-        # Converter o ângulo para graus
-        angulo_entre_direcoes_graus = degrees(angulo_entre_direcoes)
-
-        # Ajustar o ângulo para garantir que esteja no intervalo [0, 360)
-        angulo_entre_direcoes_graus = (angulo_entre_direcoes_graus + 360) % 360
-
-        # Levar em consideração a orientação do veículo
-        direcao_final = (angulo_entre_direcoes_graus - self.current_yaw + 360) % 360
-
-        return direcao_final
-    '''    
 
     def calculate_distance_between_points(self, lat1, lon1, lat2, lon2):
         # Using geopy lib to calculate geodesic distance
