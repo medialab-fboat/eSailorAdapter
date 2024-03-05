@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 import time
 import rospy
-from mavros_msgs.msg import OverrideRCIn, WaypointList, Waypoint, State, RCOut
+from mavros_msgs.msg import OverrideRCIn, WaypointList, Waypoint, State, RCOut, Param
 from mavros_msgs.srv import *
 from std_msgs.msg import Int32MultiArray
 from std_msgs.msg import Float64MultiArray, Float64
 from sensor_msgs.msg import Imu, NavSatFix
-from geometry_msgs.msg import Quaternion
+from geometry_msgs.msg import Quaternion, TwistStamped
 from geopy.distance import geodesic
 from math import atan2, asin, degrees, sqrt, radians
 def main():
@@ -67,6 +67,9 @@ class PixhawkDataTopicManager:
         self.imu_topic = '/mavros/imu/data'
         rospy.Subscriber(self.imu_topic, Imu, self.imu_callback)
         
+        #Surge Speed
+        self.surgeSpeed_topic = '/mavros/local_position/velocity_body'
+        rospy.Subscriber(self.surgeSpeed_topic, TwistStamped, self.surge_velocity_callback)
 
         #GPS
         self.waypoint_sub = rospy.Subscriber('/mavros/mission/waypoints', WaypointList, self.waypoint_callback)
@@ -84,15 +87,20 @@ class PixhawkDataTopicManager:
         #Pixhawk Channels
         self.rcIn_topic = '/mavros/rc/out'
         rospy.Subscriber(self.rcIn_topic, RCOut, self.rc_callback)
+
+
+        #Pixhawk Parameters
+        self.parameters_topic = '/mavros/param/param_value'
+        rospy.Subscriber(self.parameters_topic, Param, self.param_callback)
         
         
         self.distanceToTarget = 0
         self.angleBetweenFowardAndTarget = 0
         self.surgeSpeed = 1.3
-        self.apparentWindSpeed = 1.4
-        self.apparentWindAngle = 1.5
-        self.boomAngle = 1.6
-        self.rudderAngle = 1.7
+        self.apparentWindSpeed = 0
+        self.apparentWindAngle = 0
+        self.boomAngle = 0
+        self.rudderAngle = 0
         self.electricPropulsionPower = 0
         self.rollAngle = 0
 
@@ -118,9 +126,19 @@ class PixhawkDataTopicManager:
         self.current_position = position
         self.calculate_distance()
 
-    def rc_callback(self, data):
-        #print("PWM of channel 1:", data.channels[0])        
-        self.electricPropulsionPower = int(data.channels[0])
+    #PWM propulsion motor
+    def rc_callback(self, data):     
+        self.electricPropulsionPower = int(data.channels[1])
+
+    def param_callback(self, data):        
+        if data.param_id == "RUDDER_ANGLE":
+            self.rudderAngle = data.value.real               
+        elif data.param_id == "RUDDER_CURRENT":
+            self.apparentWindSpeed = data.value.real
+        elif data.param_id == "SAIL_CURRENT":
+            self.apparentWindAngle = data.value.real        
+        elif data.param_id == "SAIL_ANGLE":
+            self.boomAngle = data.value.real
 
     def handle_compass_hdg_rad(self, data):
         self.current_yaw = data.data        
@@ -133,7 +151,7 @@ class PixhawkDataTopicManager:
                 wpPullService().wp_received
 
             except rospy.ServiceException:
-                print("Service Puling call failed:")
+                print("mavros/mission/pull service Puling call failed(It is not a severe error.)")
             
             #If there is at least one waypoint beside vehicle current position waypoint in pixhawk
             if len(self.waypoint_list.waypoints) > 1:
@@ -178,6 +196,11 @@ class PixhawkDataTopicManager:
         final_direction = (angle_between_directions_degrees - self.current_yaw + 360) % 360
 
         return final_direction
+    
+    def surge_velocity_callback(self, data):
+        self.surgeSpeed = data.twist.linear.x
+        rospy.loginfo(f"Surge Velocity: {self.surgeSpeed}")
+    
 
     def calculate_distance_between_points(self, lat1, lon1, lat2, lon2):
         # Using geopy lib to calculate geodesic distance
