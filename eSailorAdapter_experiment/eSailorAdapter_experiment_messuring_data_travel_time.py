@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 import time
 import rospy
-from mavros_msgs.msg import OverrideRCIn, WaypointList, Waypoint, State
+from mavros_msgs.msg import OverrideRCIn, WaypointList, Waypoint, State, RCOut, Param
 from mavros_msgs.srv import *
 from std_msgs.msg import Int32MultiArray
 from std_msgs.msg import Float64MultiArray, Float64
 from sensor_msgs.msg import Imu, NavSatFix
-from geometry_msgs.msg import Quaternion
+from geometry_msgs.msg import Quaternion, TwistStamped
 from geopy.distance import geodesic
 from math import atan2, asin, degrees, sqrt, radians
 from datetime import datetime
@@ -18,20 +18,20 @@ def main():
 
     actuatorsCommandTopicManager = ActuatorsCommandTopicManager()    
     pixhawkDataTopicManager = PixhawkDataTopicManager()
-    
+
     rate = rospy.Rate(10)  # 10 Hz
 
     while not rospy.is_shutdown():
         pixhawkDataTopicManager.publishExtractedData()
     
     rospy.spin()
-
+    
 
 class FileWriter:
     file_name = ""
 
     def __init__(self):
-        self.file_name = "measurement/esailorAdapter_measurement" + datetime.now().strftime("%d_%m_%Y %H_%M_%S_%f")[:-3]
+        self.file_name = "measurement/esailorAdapter_data_travel_time" + datetime.now().strftime("%d_%m_%Y %H_%M_%S_%f")[:-3]
 
     def writeInFile(self, msg):
         try:
@@ -41,10 +41,6 @@ class FileWriter:
             print("Fail when tried write file.")
 
 
-
-
-
-
 class ActuatorsCommandTopicManager:    
     def __init__(self):        
         self.rc_pub = rospy.Publisher('/mavros/rc/override', OverrideRCIn, queue_size=10)    
@@ -52,15 +48,11 @@ class ActuatorsCommandTopicManager:
         self.actuator_command_entrance_pub = rospy.Subscriber('/esailor_adapter/actuator_command_entrance', Int32MultiArray, self.command_entrance_callback)
         
         rospy.loginfo("Inicializado tópico /esailor_adapter/actuator_command_entrance")
-
-        self.fileWriter = FileWriter()
     
     def command_entrance_callback(self, data):
         rospy.loginfo("Comandos recebidos: {}".format(data.data))
-        #entrance_commands = "Value 1: {:.2f}, Value 2: {:.2f}, Value 3: {:.2f}".format(data.data[0], data.data[1], data.data[2])
-        entrance_commands = "{};{};{}".format(int(data.data[0]), int(data.data[1]), int(data.data[2]))
-        rospy.loginfo(entrance_commands)
-        self.fileWriter.writeInFile(entrance_commands)
+
+        rospy.loginfo("Value 1: {:.2f}, Value 2: {:.2f}, Value 3: {:.2f}".format(data.data[0], data.data[1], data.data[2]))
         self.update_pwm(data.data)
 
 
@@ -85,12 +77,16 @@ class PixhawkDataTopicManager:
     def __init__(self):        
         self.pixhawk_extracted_data_pub = rospy.Publisher('/esailor_adapter/pixhawk_extracted_data', Float64MultiArray, queue_size=10)
         self.extractedMessage = None
+        self.fileWriter = FileWriter()
 
         #IMU
         self.orientation = None
-        self.imu_topic = '/mavros/imu/data'        
+        self.imu_topic = '/mavros/imu/data'
         rospy.Subscriber(self.imu_topic, Imu, self.imu_callback)
         
+        #Surge Speed
+        self.surgeSpeed_topic = '/mavros/local_position/velocity_body'
+        rospy.Subscriber(self.surgeSpeed_topic, TwistStamped, self.surge_velocity_callback)
 
         #GPS
         self.waypoint_sub = rospy.Subscriber('/mavros/mission/waypoints', WaypointList, self.waypoint_callback)
@@ -105,16 +101,24 @@ class PixhawkDataTopicManager:
         rospy.Subscriber("/mavros/global_position/compass_hdg", Float64, self.handle_compass_hdg_rad)
 
 
+        #Pixhawk Channels
+        self.rcIn_topic = '/mavros/rc/out'
+        rospy.Subscriber(self.rcIn_topic, RCOut, self.rc_callback)
 
+
+        #Pixhawk Parameters
+        self.parameters_topic = '/mavros/param/param_value'
+        rospy.Subscriber(self.parameters_topic, Param, self.param_callback)
+        
         
         self.distanceToTarget = 0
         self.angleBetweenFowardAndTarget = 0
         self.surgeSpeed = 1.3
-        self.apparentWindSpeed = 1.4
-        self.apparentWindAngle = 1.5
-        self.boomAngle = 1.6
-        self.rudderAngle = 1.7
-        self.electricPropulsionPower = 1.8
+        self.apparentWindSpeed = 0
+        self.apparentWindAngle = 0
+        self.boomAngle = 0
+        self.rudderAngle = 0
+        self.electricPropulsionPower = 0
         self.rollAngle = 0
 
 
@@ -139,6 +143,21 @@ class PixhawkDataTopicManager:
         self.current_position = position
         self.calculate_distance()
 
+    #PWM propulsion motor
+    def rc_callback(self, data):     
+        self.electricPropulsionPower = int(data.channels[1])
+
+    def param_callback(self, data):        
+        if data.param_id == "RUDDER_ANGLE":
+            self.rudderAngle = data.value.real
+            self.fileWriter.writeInFile(f"RUDDER_ANGLE parameter data received: {self.rudderAngle}")               
+        elif data.param_id == "RUDDER_CURRENT":
+            self.apparentWindSpeed = data.value.real
+        elif data.param_id == "SAIL_CURRENT":
+            self.apparentWindAngle = data.value.real        
+        elif data.param_id == "SAIL_ANGLE":
+            self.boomAngle = data.value.real
+
     def handle_compass_hdg_rad(self, data):
         self.current_yaw = data.data        
 
@@ -150,7 +169,7 @@ class PixhawkDataTopicManager:
                 wpPullService().wp_received
 
             except rospy.ServiceException:
-                print("Service Puling call failed:")
+                print("mavros/mission/pull service Puling call failed(It is not a severe error.)")
             
             #If there is at least one waypoint beside vehicle current position waypoint in pixhawk
             if len(self.waypoint_list.waypoints) > 1:
@@ -162,10 +181,10 @@ class PixhawkDataTopicManager:
                 vehicle_lat = self.current_position.latitude
                 vehicle_lon = self.current_position.longitude
 
-                rospy.loginfo(f'Latitude waypoint{waypoint_lat}')
-                rospy.loginfo(f'Longitude waypoint{waypoint_lon}')
-                rospy.loginfo(f'Latitude veiculo{vehicle_lat}')
-                rospy.loginfo(f'Longitude veiculo{vehicle_lon}')
+                #rospy.loginfo(f'Latitude waypoint{waypoint_lat}')
+                #rospy.loginfo(f'Longitude waypoint{waypoint_lon}')
+                #rospy.loginfo(f'Latitude veiculo{vehicle_lat}')
+                #rospy.loginfo(f'Longitude veiculo{vehicle_lon}')
 
                 self.distanceToTarget = self.calculate_distance_between_points(waypoint_lat, waypoint_lon, vehicle_lat, vehicle_lon)
                 
@@ -195,33 +214,11 @@ class PixhawkDataTopicManager:
         final_direction = (angle_between_directions_degrees - self.current_yaw + 360) % 360
 
         return final_direction
-
     
-    '''
-    def calcular_direcao_entre_waypoints(self, lat1, lon1, lat2, lon2):
-        # waypoint_atual e waypoint_destino são tuplas contendo as coordenadas (latitude, longitude)
-        # orientacao_veiculo é o ângulo em graus para o qual a frente do veículo está apontando
-
-        # Calcular os vetores representando as direções
-        vetor_atual_para_destino = (
-            lat1 - lat2,
-            lon1 - lon2
-        )
-
-        # Calcular o ângulo entre os vetores usando a função atan2
-        angulo_entre_direcoes = atan2(vetor_atual_para_destino[1], vetor_atual_para_destino[0])
-
-        # Converter o ângulo para graus
-        angulo_entre_direcoes_graus = degrees(angulo_entre_direcoes)
-
-        # Ajustar o ângulo para garantir que esteja no intervalo [0, 360)
-        angulo_entre_direcoes_graus = (angulo_entre_direcoes_graus + 360) % 360
-
-        # Levar em consideração a orientação do veículo
-        direcao_final = (angulo_entre_direcoes_graus - self.current_yaw + 360) % 360
-
-        return direcao_final
-    '''    
+    def surge_velocity_callback(self, data):
+        self.surgeSpeed = data.twist.linear.x
+        rospy.loginfo(f"Surge Velocity: {self.surgeSpeed}")
+    
 
     def calculate_distance_between_points(self, lat1, lon1, lat2, lon2):
         # Using geopy lib to calculate geodesic distance

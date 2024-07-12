@@ -1,0 +1,15 @@
+C:\Users\Dickson\source\repos\CalculaDiferencaRegistroHoras\CalculaDiferencaRegistroHoras\bin\Debug\net6.0\CalculaDiferencaRegistroHoras.exe
+C:\Users\Dickson\source\repos\CalculaDiferencaRegistroHoras\CalculaDiferencaRegistroHoras\bin\Debug\net6.0\CalculaDiferencaRegistroHoras.deps.json
+C:\Users\Dickson\source\repos\CalculaDiferencaRegistroHoras\CalculaDiferencaRegistroHoras\bin\Debug\net6.0\CalculaDiferencaRegistroHoras.runtimeconfig.json
+C:\Users\Dickson\source\repos\CalculaDiferencaRegistroHoras\CalculaDiferencaRegistroHoras\bin\Debug\net6.0\CalculaDiferencaRegistroHoras.dll
+C:\Users\Dickson\source\repos\CalculaDiferencaRegistroHoras\CalculaDiferencaRegistroHoras\bin\Debug\net6.0\CalculaDiferencaRegistroHoras.pdb
+C:\Users\Dickson\source\repos\CalculaDiferencaRegistroHoras\CalculaDiferencaRegistroHoras\obj\Debug\net6.0\CalculaDiferencaRegistroHoras.csproj.AssemblyReference.cache
+C:\Users\Dickson\source\repos\CalculaDiferencaRegistroHoras\CalculaDiferencaRegistroHoras\obj\Debug\net6.0\CalculaDiferencaRegistroHoras.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\Dickson\source\repos\CalculaDiferencaRegistroHoras\CalculaDiferencaRegistroHoras\obj\Debug\net6.0\CalculaDiferencaRegistroHoras.AssemblyInfoInputs.cache
+C:\Users\Dickson\source\repos\CalculaDiferencaRegistroHoras\CalculaDiferencaRegistroHoras\obj\Debug\net6.0\CalculaDiferencaRegistroHoras.AssemblyInfo.cs
+C:\Users\Dickson\source\repos\CalculaDiferencaRegistroHoras\CalculaDiferencaRegistroHoras\obj\Debug\net6.0\CalculaDiferencaRegistroHoras.csproj.CoreCompileInputs.cache
+C:\Users\Dickson\source\repos\CalculaDiferencaRegistroHoras\CalculaDiferencaRegistroHoras\obj\Debug\net6.0\CalculaDiferencaRegistroHoras.dll
+C:\Users\Dickson\source\repos\CalculaDiferencaRegistroHoras\CalculaDiferencaRegistroHoras\obj\Debug\net6.0\refint\CalculaDiferencaRegistroHoras.dll
+C:\Users\Dickson\source\repos\CalculaDiferencaRegistroHoras\CalculaDiferencaRegistroHoras\obj\Debug\net6.0\CalculaDiferencaRegistroHoras.pdb
+C:\Users\Dickson\source\repos\CalculaDiferencaRegistroHoras\CalculaDiferencaRegistroHoras\obj\Debug\net6.0\CalculaDiferencaRegistroHoras.genruntimeconfig.cache
+C:\Users\Dickson\source\repos\CalculaDiferencaRegistroHoras\CalculaDiferencaRegistroHoras\obj\Debug\net6.0\ref\CalculaDiferencaRegistroHoras.dll
